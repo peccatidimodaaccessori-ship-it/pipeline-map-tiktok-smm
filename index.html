@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Peccati Di Moda — TikTok Pipeline</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --pink: #e879a0; --pink-light: #f9a8d4; --pink-dim: rgba(232,121,160,0.18);
+      --bg: #08090d; --glass: rgba(255,255,255,0.04); --glass-border: rgba(255,255,255,0.08);
+      --text: #e8e8e8; --text-dim: rgba(232,232,232,0.45);
+    }
+    html, body { width:100%; height:100%; background:var(--bg); color:var(--text); font-family:'Inter',sans-serif; overflow:hidden; user-select:none; }
+    #stars { position:fixed; inset:0; pointer-events:none; z-index:0; }
+    header {
+      position:fixed; top:0; left:0; right:0; z-index:100; padding:18px 28px;
+      display:flex; align-items:center; gap:16px;
+      background:linear-gradient(to bottom,rgba(8,9,13,0.95) 70%,transparent);
+      backdrop-filter:blur(12px);
+    }
+    .logo-mark {
+      width:36px; height:36px; background:linear-gradient(135deg,var(--pink),var(--pink-light));
+      border-radius:10px; display:flex; align-items:center; justify-content:center;
+      font-size:16px; font-weight:700; color:#08090d;
+      box-shadow:0 0 20px rgba(232,121,160,0.4); animation:pulse-logo 3s ease-in-out infinite;
+    }
+    @keyframes pulse-logo { 0%,100%{box-shadow:0 0 20px rgba(232,121,160,0.4);} 50%{box-shadow:0 0 36px rgba(232,121,160,0.7);} }
+    .header-titles h1 {
+      font-family:'Space Grotesk',sans-serif; font-size:17px; font-weight:700; letter-spacing:0.02em;
+      background:linear-gradient(90deg,var(--pink-light),var(--text));
+      -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+    }
+    .header-titles p { font-size:11px; color:var(--text-dim); margin-top:1px; letter-spacing:0.05em; }
+    .badge { margin-left:auto; display:flex; gap:8px; }
+    .badge span {
+      font-size:10px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase;
+      padding:4px 10px; border-radius:20px; border:1px solid var(--glass-border);
+      background:var(--glass); color:var(--text-dim);
+    }
+    .badge span.active { color:#34d399; border-color:rgba(52,211,153,0.3); background:rgba(52,211,153,0.08); }
+    #tooltip {
+      position:fixed; z-index:200; pointer-events:none; max-width:300px;
+      opacity:0; transition:opacity 0.25s ease,transform 0.25s ease; transform:translateY(6px);
+    }
+    #tooltip.visible { opacity:1; transform:translateY(0); }
+    .tt-inner {
+      background:rgba(12,14,20,0.95); border:1px solid var(--glass-border);
+      backdrop-filter:blur(20px); border-radius:14px; padding:14px 16px;
+      box-shadow:0 24px 60px rgba(0,0,0,0.7);
+    }
+    .tt-title { font-family:'Space Grotesk',sans-serif; font-size:13px; font-weight:700; margin-bottom:6px; }
+    .tt-body  { font-size:11px; line-height:1.6; color:var(--text-dim); }
+    .tt-tags  { margin-top:8px; display:flex; flex-wrap:wrap; gap:4px; }
+    .tt-tag   { font-size:9px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; padding:2px 7px; border-radius:20px; background:var(--glass); border:1px solid var(--glass-border); color:var(--text-dim); }
+    #graph-svg { position:fixed; inset:0; z-index:10; width:100%; height:100%; }
+    .link { stroke-opacity:0.35; stroke-linecap:round; transition:stroke-opacity 0.3s; }
+    .link.highlighted { stroke-opacity:0.85; }
+    .node { cursor:pointer; }
+    .node circle.halo { fill:none; opacity:0; transition:opacity 0.3s; }
+    .node:hover circle.halo { opacity:1; }
+    .node circle.body { transition:filter 0.3s ease; }
+    .node:hover circle.body { filter:brightness(1.35); }
+    .node text.label { font-family:'Space Grotesk',sans-serif; font-weight:600; paint-order:stroke; stroke-linejoin:round; pointer-events:none; }
+    .node text.sublabel { font-family:'Inter',sans-serif; font-weight:400; pointer-events:none; }
+    #legend {
+      position:fixed; bottom:24px; left:24px; z-index:100;
+      background:rgba(10,11,16,0.88); border:1px solid var(--glass-border);
+      backdrop-filter:blur(16px); border-radius:14px; padding:14px 18px;
+    }
+    #legend h3 { font-size:9px; text-transform:uppercase; letter-spacing:0.1em; color:var(--text-dim); margin-bottom:10px; }
+    .legend-row { display:flex; align-items:center; gap:8px; margin-bottom:7px; font-size:11px; color:var(--text-dim); }
+    .legend-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+    #controls { position:fixed; bottom:24px; right:24px; z-index:100; display:flex; flex-direction:column; gap:6px; }
+    .ctrl-btn {
+      width:38px; height:38px; border-radius:10px; background:rgba(10,11,16,0.88);
+      border:1px solid var(--glass-border); backdrop-filter:blur(16px); color:var(--text-dim);
+      font-size:16px; display:flex; align-items:center; justify-content:center;
+      cursor:pointer; transition:background 0.2s,color 0.2s;
+    }
+    .ctrl-btn:hover { background:var(--pink-dim); color:var(--pink-light); }
+    #hint {
+      position:fixed; top:72px; right:24px; z-index:100; font-size:10px; color:var(--text-dim);
+      background:rgba(10,11,16,0.7); border:1px solid var(--glass-border);
+      border-radius:8px; padding:6px 12px; backdrop-filter:blur(8px); opacity:0.7;
+    }
+  </style>
+</head>
+<body>
+<canvas id="stars"></canvas>
+<header>
+  <div class="logo-mark">P</div>
+  <div class="header-titles">
+    <h1>Peccati Di Moda — TikTok Pipeline</h1>
+    <p>Automazione video TikTok Shop · Google Drive · Claude AI</p>
+  </div>
+  <div class="badge">
+    <span>Python 3</span><span>Claude Opus</span><span class="active">Cloud Run ✓</span>
+  </div>
+</header>
+<div id="hint">Trascina · Scroll per zoom · Hover per dettagli</div>
+<svg id="graph-svg">
+  <defs>
+    <filter id="glow-pink" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow-soft" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <marker id="arrow" viewBox="0 -4 8 8" refX="8" refY="0" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0,-4L8,0L0,4Z" fill="rgba(232,121,160,0.5)"/>
+    </marker>
+  </defs>
+  <g id="graph-root"></g>
+</svg>
+<div id="tooltip"><div class="tt-inner">
+  <div class="tt-title" id="tt-title"></div>
+  <div class="tt-body"  id="tt-body"></div>
+  <div class="tt-tags"  id="tt-tags"></div>
+</div></div>
+<div id="legend">
+  <h3>Legenda</h3>
+  <div class="legend-row"><div class="legend-dot" style="background:#e2e8f0"></div>Core / Orchestratore</div>
+  <div class="legend-row"><div class="legend-dot" style="background:#4f8ef7"></div>Google Drive</div>
+  <div class="legend-row"><div class="legend-dot" style="background:#a78bfa"></div>Claude AI</div>
+  <div class="legend-row"><div class="legend-dot" style="background:#34d399"></div>Copertina</div>
+  <div class="legend-row"><div class="legend-dot" style="background:#e879a0"></div>TikTok</div>
+  <div class="legend-row"><div class="legend-dot" style="background:#fb923c"></div>Shopify</div>
+  <div class="legend-row"><div class="legend-dot" style="background:#f59e0b"></div>Analytics</div>
+  <div class="legend-row"><div class="legend-dot" style="background:#38bdf8"></div>Fallback GCS / Sheets</div>
+</div>
+<div id="controls">
+  <div class="ctrl-btn" id="btn-zoom-in">+</div>
+  <div class="ctrl-btn" id="btn-zoom-out">−</div>
+  <div class="ctrl-btn" id="btn-reset">⌂</div>
+</div>
+<script>
+(function(){
+  var c=document.getElementById('stars'),ctx=c.getContext('2d'),st=[];
+  function resize(){c.width=window.innerWidth;c.height=window.innerHeight;st=Array.from({length:160},function(){return{x:Math.random()*c.width,y:Math.random()*c.height,r:Math.random()*1.2+0.2,o:Math.random()*0.5+0.1,s:Math.random()*0.4+0.3};});}
+  function draw(){ctx.clearRect(0,0,c.width,c.height);var t=Date.now()/2000;st.forEach(function(s){ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);ctx.fillStyle='rgba(255,255,255,'+(s.o*(0.6+0.4*Math.sin(t*s.s+s.x)))+')';ctx.fill();});requestAnimationFrame(draw);}
+  resize();window.addEventListener('resize',resize);draw();
+})();
+
+var nodes=[
+  {id:'main',label:'main.py',sub:'Orchestratore',group:'core',radius:46,icon:'🚀',detail:'Punto di ingresso del sistema. Elenca i video in "Da Processare", per ciascuno: scarica da Drive → genera contenuto con Claude → crea copertina → carica su TikTok. In caso di blocco spam attiva il fallback GCS + Google Sheet.',tags:['Orchestratore','Entry Point','Loop Video','Fallback']},
+  {id:'storage',label:'storage.py',sub:'Storage Layer',group:'core',radius:28,icon:'💾',detail:'Gestisce tutti i file locali e cloud. Legge/scrive JSON (published_videos, product_stats, winners), carica cover su GCS, restituisce URL pubblico. Interfaccia unica per tutti i moduli.',tags:['JSON','GCS upload','published_videos','product_stats']},
+  {id:'drive',label:'drive.py',sub:'Google Drive',group:'drive',radius:38,icon:'📁',detail:'Interfaccia Google Drive via Service Account. Elenca video in "Da Processare", scarica il file .MOV/.MP4 in locale, sposta nella cartella "Processati" dopo il completamento.',tags:['list_files','download_video','move_file','Service Account']},
+  {id:'folder_in',label:'Da Processare',sub:'Cartella Drive',group:'drive',radius:20,icon:'📂',detail:'Cartella di input su Google Drive. Lorenzo carica qui il video con nome del prodotto (es. "anello-maia.MOV"). Il nome del file è la chiave per trovare il prodotto su Shopify.',tags:['Input','Nome = handle prodotto','Trigger']},
+  {id:'folder_out',label:'Processati',sub:'Cartella Drive',group:'drive',radius:20,icon:'✅',detail:'Destinazione del video dopo elaborazione completata. Mantiene "Da Processare" pulita e traccia cosa è già stato pubblicato.',tags:['Output','Archivio']},
+  {id:'generate',label:'generate.py',sub:'Generatore contenuti',group:'claude',radius:44,icon:'🧠',detail:'Cuore AI del sistema. Estrae N frame dal video, li passa a Claude Opus insieme al contesto prodotto. Claude sceglie il frame migliore per la copertina e genera: descrizione TikTok, hashtag, frase copertina. Tone: colloquiale, come un\'amica.',tags:['Frame extraction','Claude Opus 4','best_frame_index','Tone of voice']},
+  {id:'claude_api',label:'Claude Opus 4',sub:'Vision + Generation',group:'claude',radius:32,icon:'✨',detail:'Modello multimodale. Analizza i frame del video, legge i sottotitoli bruciati nel video (no Whisper), valuta il contesto prodotto e genera il contenuto ottimizzato per TikTok Shop.',tags:['claude-opus-4-6','Multimodale','Sottotitoli','Vision']},
+  {id:'product_context',label:'Product Context',sub:'Contesto AI',group:'claude',radius:22,icon:'📋',detail:'Tre livelli di contesto per Claude: (1) scheda prodotto Shopify, (2) statistiche storiche TikTok del prodotto, (3) esempi winners.json. Nessun prezzo esplicito nel testo generato.',tags:['Shopify data','product_stats','winners','No prezzi']},
+  {id:'shopify',label:'shopify.py',sub:'Catalogo prodotti',group:'shopify',radius:34,icon:'🛍️',detail:'Interfaccia Shopify Admin API via client_credentials. Scarica tutti i 126 prodotti del catalogo, li salva in products.json. Trova il prodotto giusto dal nome del file video via match su handle, titolo e keyword.',tags:['Admin API','client_credentials','126 prodotti','products.json']},
+  {id:'products_json',label:'products.json',sub:'Cache catalogo',group:'shopify',radius:18,icon:'🗂️',detail:'Cache locale del catalogo Shopify. Contiene: id, title, handle, description, tags, product_type, status, price, variants. Si aggiorna con sync_products().',tags:['Cache','handle','description','variants']},
+  {id:'cover',label:'cover.py',sub:'Generatore copertina',group:'cover',radius:38,icon:'🖼️',detail:'Crea la copertina TikTok dal frame scelto da Claude. Sfondo leggermente sfocato (blur 5), testo su due righe con font Lexend Bold. Solo la seconda riga ha il riquadro rosa arrotondato. Usa rembg per la segmentazione del soggetto.',tags:['Lexend Bold','rembg','u2net_human_seg','Pink box','blur 5']},
+  {id:'rembg',label:'rembg',sub:'AI Segmentazione',group:'cover',radius:18,icon:'✂️',detail:'Rimozione sfondo AI con modello u2net_human_seg, specifico per persone. Segmenta il soggetto umano per sovrapporlo allo sfondo sfocato.',tags:['u2net_human_seg','Sfondo rimosso','Pillow']},
+  {id:'upload',label:'upload.py',sub:'TikTok Upload',group:'tiktok',radius:38,icon:'📱',detail:'Carica il video su TikTok tramite Content Posting API v2 (inbox endpoint). Crea la bozza con video, descrizione, hashtag e copertina. Dopo l\'upload fa polling del publish_id per ottenere il video_id reale da usare per le analytics.',tags:['Content API v2','inbox','publish_id','video_id polling']},
+  {id:'tiktok_api',label:'TikTok API v2',sub:'Content Posting',group:'tiktok',radius:26,icon:'🎵',detail:'POST /v2/post/publish/inbox/video/ — crea bozza nella inbox del creator. Richiede OAuth token con scope video.upload. Gestisce lo spam_risk_too_many_pending_share con fallback automatico.',tags:['OAuth','video.upload','spam_risk fallback']},
+  {id:'fetch_video',label:'fetch_video_id',sub:'Polling video_id',group:'tiktok',radius:18,icon:'🔄',detail:'Polling di POST /v2/post/publish/status/fetch/ ogni 5 secondi, max 10 tentativi. Attende PUBLISH_COMPLETE e restituisce il video_id numerico per mapparlo al prodotto nelle analytics.',tags:['status/fetch','PUBLISH_COMPLETE','5s polling']},
+  {id:'gcs',label:'GCS Bucket',sub:'Google Cloud Storage',group:'fallback',radius:28,icon:'☁️',detail:'Bucket peccatidimoda-tiktok (europe-west8). Quando TikTok è bloccato, la copertina viene caricata qui e resa pubblica. URL pubblico incluso nel Google Sheet. Lifecycle: cancellazione automatica dopo 30 giorni.',tags:['europe-west8','30 giorni','Public URL','Copertine/']},
+  {id:'sheets',label:'sheets.py',sub:'Google Sheets fallback',group:'fallback',radius:24,icon:'📊',detail:'Attivo solo se TikTok è bloccato. Aggiunge riga al Google Sheet con: data, nome video, descrizione+hashtag copia-incolla, URL copertina da GCS. Lorenzo pubblica manualmente da TikTok.',tags:['Fallback TikTok','Service Account','Data + Caption + Cover URL']},
+  {id:'analytics',label:'analytics.py',sub:'Analytics Engine',group:'analytics',radius:40,icon:'📈',detail:'Importa il file Excel TikTok con le metriche video. Aggrega le statistiche per prodotto usando published_videos.json come mappa video_id→handle. Salva product_stats.json e winners.json che alimentano il contesto AI.',tags:['Excel TikTok','video_id→handle','Aggregazione','ROI']},
+  {id:'published_videos',label:'published_videos.json',sub:'Mappa video↔prodotto',group:'analytics',radius:20,icon:'🗺️',detail:'Mappa ogni video_id TikTok al suo product_handle Shopify. Popolato dopo ogni upload riuscito con: publish_id, video_id, product_handle, data, file_name.',tags:['video_id','product_handle','publish_id']},
+  {id:'product_stats',label:'product_stats.json',sub:'Statistiche per prodotto',group:'analytics',radius:24,icon:'📊',detail:'Statistiche aggregate per prodotto: total_videos, total_views, total_orders, total_revenue, total_cost, avg_roi, total_likes. Classificazione: BESTSELLER / converte bene / molto visto / dati modesti.',tags:['Per prodotto','ROI','BESTSELLER','Classificazione']},
+  {id:'winners',label:'winners.json',sub:'Top performer',group:'analytics',radius:22,icon:'🏆',detail:'I video con il miglior ROI. Usati come esempi di stile nella generazione contenuti. Claude li analizza per replicare il tono, la struttura e le parole chiave che hanno funzionato meglio.',tags:['Esempi stile','ROI > soglia','Tone replication']}
+];
+
+var links=[
+  {source:'main',target:'drive',label:'list + download'},
+  {source:'main',target:'generate',label:'generate_content()'},
+  {source:'main',target:'cover',label:'generate_cover()'},
+  {source:'main',target:'upload',label:'upload_video()'},
+  {source:'main',target:'analytics',label:'run()'},
+  {source:'main',target:'storage',label:'read/write JSON'},
+  {source:'drive',target:'folder_in',label:'legge'},
+  {source:'drive',target:'folder_out',label:'sposta OK'},
+  {source:'generate',target:'claude_api',label:'analyze frames'},
+  {source:'generate',target:'product_context',label:'build context'},
+  {source:'product_context',target:'shopify',label:'find product'},
+  {source:'product_context',target:'product_stats',label:'load stats'},
+  {source:'product_context',target:'winners',label:'load examples'},
+  {source:'shopify',target:'products_json',label:'cache'},
+  {source:'generate',target:'cover',label:'best_frame_path'},
+  {source:'cover',target:'rembg',label:'segmenta'},
+  {source:'upload',target:'tiktok_api',label:'POST video'},
+  {source:'tiktok_api',target:'fetch_video',label:'publish_id'},
+  {source:'fetch_video',target:'published_videos',label:'salva video_id'},
+  {source:'upload',target:'gcs',label:'fallback cover'},
+  {source:'upload',target:'sheets',label:'fallback log'},
+  {source:'gcs',target:'sheets',label:'cover URL'},
+  {source:'analytics',target:'published_videos',label:'mappa prodotti'},
+  {source:'analytics',target:'product_stats',label:'aggrega stats'},
+  {source:'analytics',target:'winners',label:'salva winners'},
+  {source:'product_stats',target:'generate',label:'context feedback'},
+  {source:'winners',target:'generate',label:'style feedback'}
+];
+
+var groupColor={core:'#e2e8f0',drive:'#4f8ef7',claude:'#a78bfa',cover:'#34d399',tiktok:'#e879a0',shopify:'#fb923c',analytics:'#f59e0b',fallback:'#38bdf8'};
+
+var svg=d3.select('#graph-svg'),root=svg.select('#graph-root');
+var W=function(){return window.innerWidth;},H=function(){return window.innerHeight;};
+var zoom=d3.zoom().scaleExtent([0.18,3.5]).on('zoom',function(e){root.attr('transform',e.transform);});
+svg.call(zoom);
+var initT=d3.zoomIdentity.translate(W()/2,H()/2).scale(0.68);
+
+var sim=d3.forceSimulation(nodes)
+  .force('link',d3.forceLink(links).id(function(d){return d.id;}).distance(function(d){
+    var big=['main','generate','analytics','drive','upload','shopify'];
+    var s=typeof d.source==='object'?d.source.id:d.source,t=typeof d.target==='object'?d.target.id:d.target;
+    return(big.includes(s)&&big.includes(t))?190:120;
+  }).strength(0.45))
+  .force('charge',d3.forceManyBody().strength(function(d){return -d.radius*18;}))
+  .force('center',d3.forceCenter(0,0))
+  .force('collide',d3.forceCollide(function(d){return d.radius+22;}).strength(0.8))
+  .alpha(1).alphaDecay(0.025);
+
+var lsel=root.append('g').selectAll('line').data(links).enter().append('line')
+  .attr('class','link')
+  .attr('stroke',function(d){var s=typeof d.source==='object'?d.source:nodes.find(function(n){return n.id===d.source;});return s?groupColor[s.group]:'#666';})
+  .attr('stroke-width',function(d){return['list + download','generate_content()','upload_video()','run()','analyze frames','POST video','context feedback','style feedback'].includes(d.label)?2.2:1.2;})
+  .attr('marker-end',function(d){return['generate_content()','upload_video()','run()','context feedback','style feedback','analyze frames'].includes(d.label)?'url(#arrow)':null;});
+
+var llsel=root.append('g').selectAll('text').data(links.filter(function(l){return l.label;})).enter().append('text')
+  .attr('text-anchor','middle').attr('fill','rgba(200,200,200,0.38)').attr('font-size',9)
+  .attr('font-family','Inter,sans-serif').attr('pointer-events','none').text(function(d){return d.label;});
+
+var nsel=root.append('g').selectAll('g').data(nodes).enter().append('g').attr('class','node')
+  .call(d3.drag()
+    .on('start',function(e,d){if(!e.active)sim.alphaTarget(0.25).restart();d.fx=d.x;d.fy=d.y;})
+    .on('drag',function(e,d){d.fx=e.x;d.fy=e.y;})
+    .on('end',function(e,d){if(!e.active)sim.alphaTarget(0);d.fx=null;d.fy=null;})
+  )
+  .on('mouseover',onHover).on('mousemove',onMove).on('mouseout',onOut);
+
+nsel.append('circle').attr('class','halo')
+  .attr('r',function(d){return d.radius+12;}).attr('fill',function(d){return groupColor[d.group]+'22';})
+  .attr('stroke',function(d){return groupColor[d.group];}).attr('stroke-width',1.5).style('stroke-dasharray','4 3');
+nsel.append('circle').attr('r',function(d){return d.radius+6;})
+  .attr('fill',function(d){return groupColor[d.group]+'18';}).attr('filter','url(#glow-soft)').attr('pointer-events','none');
+nsel.append('circle').attr('class','body')
+  .attr('r',function(d){return d.radius;}).attr('fill',function(d){return groupColor[d.group]+'28';})
+  .attr('stroke',function(d){return groupColor[d.group];})
+  .attr('stroke-width',function(d){return d.group==='core'&&d.id==='main'?2.5:1.8;})
+  .attr('filter',function(d){return d.id==='main'?'url(#glow-pink)':null;});
+nsel.append('text').attr('text-anchor','middle')
+  .attr('dy',function(d){return d.radius>30?'-0.3em':'0.4em';})
+  .attr('font-size',function(d){return d.radius>35?22:d.radius>25?16:13;})
+  .attr('pointer-events','none').text(function(d){return d.icon;});
+nsel.append('text').attr('class','label').attr('text-anchor','middle')
+  .attr('dy',function(d){return d.radius>30?'1.1em':'1.6em';})
+  .attr('font-size',function(d){return d.radius>35?11:9;})
+  .attr('fill',function(d){return groupColor[d.group];}).attr('stroke','#08090d').attr('stroke-width',3)
+  .text(function(d){return d.label;});
+nsel.filter(function(d){return d.radius>25;}).append('text').attr('class','sublabel')
+  .attr('text-anchor','middle').attr('dy',function(d){return d.radius>35?'2.5em':'2.8em';})
+  .attr('font-size',8).attr('fill','rgba(200,200,200,0.45)').attr('stroke','#08090d').attr('stroke-width',3)
+  .text(function(d){return d.sub;});
+
+sim.on('tick',function(){
+  lsel.attr('x1',function(d){return d.source.x;}).attr('y1',function(d){return d.source.y;})
+    .attr('x2',function(d){var dx=d.target.x-d.source.x,dy=d.target.y-d.source.y,dist=Math.sqrt(dx*dx+dy*dy)||1;return d.target.x-(dx/dist)*d.target.radius;})
+    .attr('y2',function(d){var dx=d.target.x-d.source.x,dy=d.target.y-d.source.y,dist=Math.sqrt(dx*dx+dy*dy)||1;return d.target.y-(dy/dist)*d.target.radius;});
+  llsel.attr('x',function(d){return(d.source.x+d.target.x)/2;}).attr('y',function(d){return(d.source.y+d.target.y)/2-5;});
+  nsel.attr('transform',function(d){return'translate('+d.x+','+d.y+')';});
+});
+
+setTimeout(function(){svg.transition().duration(900).call(zoom.transform,initT);},80);
+
+var tooltip=document.getElementById('tooltip'),ttTitle=document.getElementById('tt-title'),ttBody=document.getElementById('tt-body'),ttTags=document.getElementById('tt-tags');
+function onHover(e,d){
+  var col=groupColor[d.group];
+  ttTitle.textContent=d.icon+'  '+d.label; ttTitle.style.color=col;
+  ttBody.textContent=d.detail;
+  ttTags.innerHTML=(d.tags||[]).map(function(t){return'<span class="tt-tag" style="color:'+col+';border-color:'+col+'44">'+t+'</span>';}).join('');
+  tooltip.classList.add('visible'); positionTooltip(e);
+  lsel.classed('highlighted',function(l){return l.source.id===d.id||l.target.id===d.id;});
+}
+function onMove(e){positionTooltip(e);}
+function onOut(){tooltip.classList.remove('visible');lsel.classed('highlighted',false);}
+function positionTooltip(e){
+  var tw=tooltip.offsetWidth||300,th=tooltip.offsetHeight||140,x=e.clientX+18,y=e.clientY-10;
+  if(x+tw>W()-16)x=e.clientX-tw-18; if(y+th>H()-16)y=H()-th-16;
+  tooltip.style.left=x+'px'; tooltip.style.top=y+'px';
+}
+
+document.getElementById('btn-zoom-in').onclick=function(){svg.transition().duration(350).call(zoom.scaleBy,1.35);};
+document.getElementById('btn-zoom-out').onclick=function(){svg.transition().duration(350).call(zoom.scaleBy,0.75);};
+document.getElementById('btn-reset').onclick=function(){svg.transition().duration(600).call(zoom.transform,initT);};
+window.addEventListener('resize',function(){svg.call(zoom.transform,initT);});
+
+function floatNodes(){
+  nodes.forEach(function(n,i){if(sim.alpha()<0.05&&!n.fx){var amp=n.radius*0.12,t=Date.now()/2200+i*1.1;n.x+=Math.sin(t)*amp*0.04;n.y+=Math.cos(t*0.8)*amp*0.04;}});
+  if(sim.alpha()<0.05){
+    nsel.attr('transform',function(d){return'translate('+d.x+','+d.y+')';});
+    lsel.attr('x1',function(d){return d.source.x;}).attr('y1',function(d){return d.source.y;}).attr('x2',function(d){return d.target.x;}).attr('y2',function(d){return d.target.y;});
+  }
+  requestAnimationFrame(floatNodes);
+}
+floatNodes();
+</script>
+</body>
+</html>
